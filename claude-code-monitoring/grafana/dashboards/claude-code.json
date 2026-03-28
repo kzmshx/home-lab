@@ -361,14 +361,22 @@
       "datasource": { "uid": "P8E80F9AEF21F6940", "type": "loki" },
       "targets": [
         {
-          "expr": "avg_over_time({service_name=\"claude-code\"} | event_name = `api_request` | json | unwrap duration_ms [$__interval]) by (model)",
-          "legendFormat": "{{model}}",
+          "expr": "avg_over_time({service_name=\"claude-code\"} | event_name = `api_request` | unwrap duration_ms [$__interval]) by (model)",
+          "legendFormat": "avg {{model}}",
           "refId": "A"
+        },
+        {
+          "expr": "max_over_time({service_name=\"claude-code\"} | event_name = `api_request` | unwrap duration_ms [$__interval]) by (model)",
+          "legendFormat": "max {{model}}",
+          "refId": "B"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "ms"
+          "unit": "ms",
+          "custom": {
+            "fillOpacity": 10
+          }
         }
       }
     },
@@ -401,10 +409,94 @@
       }
     },
     {
+      "id": 42,
+      "title": "Cost per API Request (USD)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 36 },
+      "datasource": { "uid": "P8E80F9AEF21F6940", "type": "loki" },
+      "targets": [
+        {
+          "expr": "avg_over_time({service_name=\"claude-code\"} | event_name = `api_request` | unwrap cost_usd [$__interval]) by (model)",
+          "legendFormat": "avg {{model}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4
+        }
+      }
+    },
+    {
+      "id": 43,
+      "title": "Output Tokens per Request",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 36 },
+      "datasource": { "uid": "P8E80F9AEF21F6940", "type": "loki" },
+      "targets": [
+        {
+          "expr": "avg_over_time({service_name=\"claude-code\"} | event_name = `api_request` | unwrap output_tokens [$__interval]) by (model)",
+          "legendFormat": "avg {{model}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      }
+    },
+    {
+      "id": 44,
+      "title": "Prompt Length Distribution",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 44 },
+      "datasource": { "uid": "P8E80F9AEF21F6940", "type": "loki" },
+      "targets": [
+        {
+          "expr": "avg_over_time({service_name=\"claude-code\"} | event_name = `user_prompt` | unwrap prompt_length [$__interval])",
+          "legendFormat": "avg prompt length",
+          "refId": "A"
+        },
+        {
+          "expr": "max_over_time({service_name=\"claude-code\"} | event_name = `user_prompt` | unwrap prompt_length [$__interval])",
+          "legendFormat": "max prompt length",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      }
+    },
+    {
+      "id": 45,
+      "title": "Tool Execution Duration (ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 44 },
+      "datasource": { "uid": "P8E80F9AEF21F6940", "type": "loki" },
+      "targets": [
+        {
+          "expr": "avg_over_time({service_name=\"claude-code\"} | event_name = `tool_result` | unwrap duration_ms [$__interval]) by (tool_name)",
+          "legendFormat": "{{tool_name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        }
+      }
+    },
+    {
       "id": 50,
       "title": "Recent Events",
       "type": "logs",
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 36 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 52 },
       "datasource": { "uid": "P8E80F9AEF21F6940", "type": "loki" },
       "targets": [
         {
