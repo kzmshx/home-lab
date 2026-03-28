@@ -46,7 +46,7 @@
       "datasource": { "uid": "PBFA97CFB590B2093", "type": "prometheus" },
       "targets": [
         {
-          "expr": "sum(increase(claude_code_session_count_total[$__range]))",
+          "expr": "count(count by (session_id) (claude_code_cost_usage_USD_total))",
           "refId": "A"
         }
       ],
