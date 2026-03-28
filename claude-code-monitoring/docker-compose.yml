@@ -10,6 +10,7 @@ services:
       - "8889:8889"   # Prometheus exporter
     depends_on:
       - loki
+    mem_limit: 256m
     restart: unless-stopped
 
   prometheus:
@@ -22,8 +23,9 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=90d'
+      - '--storage.tsdb.retention.time=30d'
       - '--web.enable-lifecycle'
+    mem_limit: 256m
     restart: unless-stopped
 
   loki:
@@ -34,6 +36,7 @@ services:
       - ./loki.yaml:/etc/loki/local-config.yaml
       - loki_data:/loki
     command: -config.file=/etc/loki/local-config.yaml
+    mem_limit: 256m
     restart: unless-stopped
 
   grafana:
@@ -42,6 +45,12 @@ services:
       - "3001:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_UNIFIED_ALERTING_ENABLED=false
+      - GF_ALERTING_ENABLED=false
+      - GF_EXPLORE_ENABLED=false
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+      - GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
@@ -49,6 +58,7 @@ services:
     depends_on:
       - prometheus
       - loki
+    mem_limit: 384m
     restart: unless-stopped
 
 volumes:
