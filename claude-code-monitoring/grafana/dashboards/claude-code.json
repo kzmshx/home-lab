@@ -105,7 +105,7 @@
       },
       "targets": [
         {
-          "expr": "count(count by (session_id) (claude_code_cost_usage_USD_total))",
+          "expr": "count(count by (session_id) (increase(claude_code_cost_usage_USD_total[$__range]) > 0))",
           "refId": "A"
         }
       ],
@@ -441,7 +441,8 @@
       "id": 20,
       "targets": [
         {
-          "expr": "sum by (model) (increase(claude_code_cost_usage_USD_total[5m]))",
+          "expr": "sum by (model) (increase(claude_code_cost_usage_USD_total[$interval]))",
+          "interval": "$interval",
           "legendFormat": "{{model}}",
           "refId": "A"
         }
@@ -476,7 +477,8 @@
       "id": 21,
       "targets": [
         {
-          "expr": "sum by (type) (increase(claude_code_token_usage_tokens_total[5m]))",
+          "expr": "sum by (type) (increase(claude_code_token_usage_tokens_total[$interval]))",
+          "interval": "$interval",
           "legendFormat": "{{type}}",
           "refId": "A"
         }
@@ -491,43 +493,12 @@
       },
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
           "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
+            "drawStyle": "bars",
             "fillOpacity": 80,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineWidth": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
+            "stacking": {
+              "mode": "normal"
             }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
           }
         },
         "overrides": []
@@ -539,32 +510,8 @@
         "y": 20
       },
       "id": 30,
-      "options": {
-        "barRadius": 0,
-        "barWidth": 0.97,
-        "fullHighlight": false,
-        "groupWidth": 0.7,
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "orientation": "auto",
-        "showValue": "auto",
-        "stacking": "normal",
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        },
-        "xTickLabelRotation": -45,
-        "xTickLabelSpacing": 0
-      },
-      "pluginVersion": "12.4.2",
       "targets": [
         {
-          "direction": "backward",
           "editorMode": "code",
           "expr": "sum by (tool_name) (count_over_time({service_name=\"claude-code\"} | event_name = `tool_result` [$interval]))",
           "legendFormat": "{{tool_name}}",
@@ -574,7 +521,7 @@
         }
       ],
       "title": "Tool Usage (Loki)",
-      "type": "barchart"
+      "type": "timeseries"
     },
     {
       "datasource": {
@@ -583,43 +530,12 @@
       },
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
           "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
+            "drawStyle": "bars",
             "fillOpacity": 80,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineWidth": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
+            "stacking": {
+              "mode": "normal"
             }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
           }
         },
         "overrides": []
@@ -631,32 +547,8 @@
         "y": 20
       },
       "id": 31,
-      "options": {
-        "barRadius": 0,
-        "barWidth": 0.97,
-        "fullHighlight": false,
-        "groupWidth": 0.7,
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "orientation": "auto",
-        "showValue": "auto",
-        "stacking": "normal",
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        },
-        "xTickLabelRotation": -45,
-        "xTickLabelSpacing": 0
-      },
-      "pluginVersion": "12.4.2",
       "targets": [
         {
-          "direction": "backward",
           "editorMode": "code",
           "expr": "sum by (tool_name, decision) (count_over_time({service_name=\"claude-code\"} | event_name = `tool_decision` [$interval]))",
           "legendFormat": "{{tool_name}} ({{decision}})",
@@ -666,7 +558,7 @@
         }
       ],
       "title": "Tool Decisions",
-      "type": "barchart"
+      "type": "timeseries"
     },
     {
       "datasource": {
