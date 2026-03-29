@@ -1,0 +1,137 @@
+/* Claude Code monitor styles */
+
+.claude-monitor {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto 1fr;
+  gap: 16px;
+  padding: 16px 24px;
+  height: calc(720px - 61px - 25px);
+  overflow: hidden;
+}
+
+/* Cost panel - spans full width */
+.cost-panel {
+  grid-column: 1 / -1;
+  border: 1px solid var(--green-dim);
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cost-total {
+  font-size: 48px;
+  line-height: 1;
+}
+
+.cost-period {
+  font-size: 28px;
+  color: var(--green-dim);
+}
+
+.cost-label {
+  font-size: 16px;
+  color: var(--green-dim);
+  margin-top: 4px;
+}
+
+/* Token panel */
+.token-panel {
+  border: 1px solid var(--green-dim);
+  padding: 12px 16px;
+}
+
+.token-panel h2 {
+  font-size: 18px;
+  font-weight: normal;
+  color: var(--green-dim);
+  margin-bottom: 12px;
+  letter-spacing: 1px;
+}
+
+.token-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 18px;
+}
+
+.token-label {
+  color: var(--green-dim);
+}
+
+.token-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Token bar visualization */
+.token-bar-container {
+  margin-top: 12px;
+  height: 24px;
+  display: flex;
+  border: 1px solid var(--green-dim);
+  overflow: hidden;
+}
+
+.token-bar-segment {
+  height: 100%;
+  transition: width 0.5s ease;
+}
+
+.token-bar-segment.input { background: var(--green); }
+.token-bar-segment.output { background: var(--amber); }
+.token-bar-segment.cache-read { background: var(--green-dim); }
+.token-bar-segment.cache-creation { background: #1a5c1a; }
+
+/* Activity counters */
+.activity-panel {
+  border: 1px solid var(--green-dim);
+  padding: 12px 16px;
+}
+
+.activity-panel h2 {
+  font-size: 18px;
+  font-weight: normal;
+  color: var(--green-dim);
+  margin-bottom: 12px;
+  letter-spacing: 1px;
+}
+
+.counter-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.counter-item {
+  text-align: center;
+}
+
+.counter-value {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.counter-label {
+  font-size: 14px;
+  color: var(--green-dim);
+  margin-top: 4px;
+}
+
+/* Session info - spans full width */
+.session-panel {
+  grid-column: 1 / -1;
+  border: 1px solid var(--green-dim);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.session-panel .model-badge {
+  background: rgba(51, 255, 51, 0.1);
+  border: 1px solid var(--green-dim);
+  padding: 4px 12px;
+  font-size: 16px;
+}
