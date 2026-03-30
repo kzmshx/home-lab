@@ -398,6 +398,13 @@ body {
 .feed-title {
   font-size: 18px;
   line-height: 1.4;
+  color: var(--green);
+  text-decoration: none;
+}
+
+a.feed-title:hover {
+  text-decoration: underline;
+  text-shadow: 0 0 4px var(--green), 0 0 8px var(--green);
 }
 
 .feed-meta {

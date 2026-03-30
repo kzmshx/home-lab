@@ -314,7 +314,11 @@ fn view_feed(items : Array[@feed.FeedItem]) -> @html.Html {
           @html.div(
             class="feed-content",
             [
-              @html.div(class="feed-title", item.title),
+              if item.url.length() > 0 {
+                @html.a(href=item.url, target=Blank, class="feed-title", item.title)
+              } else {
+                @html.div(class="feed-title", item.title)
+              },
               @html.div(
                 class="feed-meta",
                 "\{item.score} pts | \{item.by}",
