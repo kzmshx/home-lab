@@ -6,6 +6,7 @@
 enum Tab {
   Daily
   Claude
+  Feed
 } derive(Show, Eq)
 
 struct Model {
@@ -15,6 +16,7 @@ struct Model {
   reactions : Array[@daily.Reaction]
   past : Array[@daily.PastDaily]
   claude : ClaudeState
+  feed : Array[@feed.FeedItem]
 } derive(Show)
 
 enum DailyState {
@@ -42,6 +44,9 @@ enum Msg {
   GotReactions(Array[@daily.Reaction])
   PollPast
   GotPast(Array[@daily.PastDaily])
+  // Feed
+  PollFeed
+  GotFeed(Array[@feed.FeedItem])
   // Claude
   PollClaude
   GotClaude(@prometheus.ClaudeMetrics)
@@ -113,6 +118,25 @@ fn update(dispatch : @rabbita.Dispatch[Msg], msg : Msg, model : Model) -> (@rabb
     }
     GotPast(p) => (@rabbita.none, { ..model, past: p })
 
+    // Feed
+    PollFeed => {
+      let cmd = @http.get(
+        "http://127.0.0.1:8721/feed",
+        expect=Json(
+          fn(result) {
+            match result {
+              Ok(items) => dispatch(GotFeed(items))
+              Err(_) => dispatch(GotFeed([]))
+            }
+          },
+          @feed.decode_feed,
+        ),
+      )
+      let next = @rabbita.delay(dispatch(PollFeed), 300_000)
+      (@rabbita.batch([cmd, next]), model)
+    }
+    GotFeed(items) => (@rabbita.none, { ..model, feed: items })
+
     // Claude
     PollClaude => {
       let cmd = @http.get(
@@ -143,6 +167,7 @@ fn view(dispatch : @rabbita.Dispatch[Msg], model : Model) -> @html.Html {
     match model.tab {
       Daily => view_daily(model.daily, model.reactions, model.past)
       Claude => view_claude(model.claude)
+      Feed => view_feed(model.feed)
     },
     view_footer(),
   ])
@@ -157,6 +182,7 @@ fn view_header(dispatch : @rabbita.Dispatch[Msg], model : Model) -> @html.Html {
         [
           tab_link(dispatch, "DAILY", Daily, model.tab),
           tab_link(dispatch, "CLAUDE", Claude, model.tab),
+          tab_link(dispatch, "FEED", Feed, model.tab),
         ],
       ),
       @html.span(class="clock glow", model.clock),
@@ -268,6 +294,36 @@ fn view_timeline_entry(entry : @daily.TimelineEntry, reactions : Map[String, Str
         ],
       ),
     ],
+  )
+}
+
+// --- Feed view ---
+
+fn view_feed(items : Array[@feed.FeedItem]) -> @html.Html {
+  if items.length() == 0 {
+    return @html.div(class="loading glow", "LOADING FEED...")
+  }
+  @html.div(
+    class="feed-view",
+    items.mapi(fn(i, item) {
+      let rank = (i + 1).to_string()
+      @html.div(
+        class="feed-item",
+        [
+          @html.span(class="feed-rank", rank),
+          @html.div(
+            class="feed-content",
+            [
+              @html.div(class="feed-title", item.title),
+              @html.div(
+                class="feed-meta",
+                "\{item.score} pts | \{item.by}",
+              ),
+            ],
+          ),
+        ],
+      )
+    }),
   )
 }
 
@@ -397,6 +453,7 @@ fn main {
       reactions: [],
       past: [],
       claude: ClaudeLoading,
+      feed: [],
     },
     update=update,
     view=view,
@@ -407,6 +464,7 @@ fn main {
       @rabbita.delay(dispatch(Tick), 1000),
       dispatch(PollDaily),
       dispatch(PollClaude),
+      dispatch(PollFeed),
     ]),
   )
   app.mount("app")

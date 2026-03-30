@@ -265,6 +265,103 @@ def get_past_dailies():
     return results
 
 
+# --- News feed (Hacker News) ---
+
+HN_TOP_URL = "https://hacker-news.firebaseio.com/v0/topstories.json"
+HN_ITEM_URL = "https://hacker-news.firebaseio.com/v0/item/{}.json"
+
+TOPIC_KEYWORDS = {
+    "tech/dev/lang": ["programming", "language", "compiler", "rust", "typescript", "python", "moonbit", "wasm"],
+    "tech/dev/ops": ["ci", "cd", "deploy", "kubernetes", "docker", "monitoring", "observability"],
+    "tech/ai/llm": ["llm", "gpt", "claude", "ai", "model", "transformer"],
+    "tech/ai/agent": ["agent", "autonomous", "agentic"],
+    "tech/cloud/gcp": ["google cloud", "gcp", "bigquery", "vertex"],
+    "tech/cloud/aws": ["aws", "amazon", "ecs", "lambda", "bedrock"],
+    "tech/infra": ["infrastructure", "terraform", "networking"],
+    "tech/data/db": ["database", "sql", "postgres", "mysql"],
+    "tech/dev/oss": ["open source", "oss", "github", "contribution"],
+}
+
+
+class FeedCache:
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.last_fetch = 0
+        self.items = []
+        self.ttl = 300
+
+    def get_or_fetch(self, tags=None):
+        now = time.time()
+        with self.lock:
+            if now - self.last_fetch < self.ttl and self.items:
+                return self._filter(tags)
+
+        items = fetch_hn_top(30)
+        with self.lock:
+            self.items = items
+            self.last_fetch = now
+        return self._filter(tags)
+
+    def _filter(self, tags):
+        if not tags:
+            return self.items[:15]
+        keywords = set()
+        for tag in tags:
+            for kw in TOPIC_KEYWORDS.get(tag, []):
+                keywords.add(kw.lower())
+        if not keywords:
+            return self.items[:15]
+        scored = []
+        for item in self.items:
+            title = (item.get("title") or "").lower()
+            score = sum(1 for kw in keywords if kw in title)
+            scored.append((score, item))
+        scored.sort(key=lambda x: -x[0])
+        return [item for _, item in scored[:15]]
+
+
+def fetch_hn_top(count):
+    try:
+        with urllib.request.urlopen(HN_TOP_URL, timeout=5) as resp:
+            ids = json.loads(resp.read())[:count]
+    except Exception:
+        return []
+
+    items = []
+    for item_id in ids:
+        try:
+            url = HN_ITEM_URL.format(item_id)
+            with urllib.request.urlopen(url, timeout=3) as resp:
+                item = json.loads(resp.read())
+                if item and item.get("title"):
+                    items.append({
+                        "id": item["id"],
+                        "title": item["title"],
+                        "url": item.get("url", ""),
+                        "score": item.get("score", 0),
+                        "by": item.get("by", ""),
+                        "time": item.get("time", 0),
+                    })
+        except Exception:
+            continue
+    return items
+
+
+def get_daily_tags():
+    path = get_daily_path()
+    if not os.path.exists(path):
+        return []
+    with open(path, "r", encoding="utf-8") as f:
+        content = f.read(500)
+    match = re.search(r"tags:\s*\[([^\]]+)\]", content)
+    if not match:
+        return []
+    return [t.strip().strip("'\"") for t in match.group(1).split(",")]
+
+
+feed_cache = None
+
+
 # --- Prometheus proxy ---
 
 def prom_query(expr):
@@ -389,6 +486,9 @@ class MetricsHandler(BaseHTTPRequestHandler):
             self._json_response(reactions)
         elif self.path == "/daily/past":
             self._json_response(get_past_dailies())
+        elif self.path == "/feed":
+            tags = get_daily_tags()
+            self._json_response(feed_cache.get_or_fetch(tags))
         elif self.path == "/daily/stream":
             self._sse_response()
         else:
@@ -436,6 +536,7 @@ if __name__ == "__main__":
     psutil.cpu_percent(interval=None, percpu=True)
     daily_watcher = DailyWatcher()
     reaction_cache = ReactionCache()
+    feed_cache = FeedCache()
     port = 8721
     server = ThreadingHTTPServer(("127.0.0.1", port), MetricsHandler)
     print(f"Retro Dashboard BFF listening on http://127.0.0.1:{port}")

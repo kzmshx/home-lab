@@ -364,3 +364,44 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Feed */
+.feed-view {
+  padding: 16px 24px;
+  height: calc(720px - 61px - 25px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.feed-item {
+  display: flex;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(51, 255, 51, 0.05);
+}
+
+.feed-rank {
+  flex-shrink: 0;
+  width: 30px;
+  font-size: 18px;
+  color: var(--green-dim);
+  text-align: right;
+}
+
+.feed-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.feed-title {
+  font-size: 18px;
+  line-height: 1.4;
+}
+
+.feed-meta {
+  font-size: 14px;
+  color: var(--green-dim);
+  margin-top: 2px;
+}

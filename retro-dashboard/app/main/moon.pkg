@@ -5,6 +5,7 @@ import {
   "kzmshx/retro-dashboard/lib/prometheus",
   "kzmshx/retro-dashboard/lib/format",
   "kzmshx/retro-dashboard/lib/daily",
+  "kzmshx/retro-dashboard/lib/feed",
 }
 
 options(
