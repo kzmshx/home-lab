@@ -1,0 +1,100 @@
+# PLAN: feat/retro-dashboard-personal
+
+## Goal
+
+retro-dashboard を「インフラモニタリング」から「パーソナルインフォメーションラジエーター」に拡張する。Obsidian の日報・ナレッジベースと接続し、5インチ CRT 風画面（1280x720）に日常の情報を流す。
+
+## 背景
+
+- Wokyis M5（Mac mini 用レトロドック、5インチディスプレイ内蔵）の購入検討が発端
+- vanilla JS プロトタイプ → MoonBit + Rabbita への移行済み（CLAUDE タブ）
+- CI/SYSTEM タブはプロトタイプにあるが MoonBit 未移植
+
+## アーキテクチャ
+
+```
+┌─────────────────────────────────────────────┐
+│ Browser (1280x720)                          │
+│ MoonBit + Rabbita (TEA)                     │
+│ ┌─────┬────────┬───────┬───────┬──────────┐ │
+│ │DAILY│ CLAUDE │  CI   │SYSTEM │  FEED    │ │
+│ └─────┴────────┴───────┴───────┴──────────┘ │
+│         ▲ HTTP GET / SSE                    │
+└─────────┼───────────────────────────────────┘
+          │
+┌─────────┼───────────────────────────────────┐
+│ metrics-server (Python)                     │
+│                                             │
+│ /daily          ← Obsidian Vault 読み取り   │
+│ /daily/stream   ← SSE (タイムライン更新監視) │
+│ /daily/reaction ← AI リアクション生成       │
+│ /claude-metrics ← Prometheus proxy          │
+│ /metrics        ← システムメトリクス        │
+│ /feed           ← ニュースフィード          │
+│ /feed/stream    ← SSE (新着ニュース配信)    │
+└─────────────────────────────────────────────┘
+     │          │           │
+     ▼          ▼           ▼
+  Obsidian   Prometheus   外部API
+  Vault                   (HN/GitHub/Zenn)
+```
+
+### SSE (Server-Sent Events)
+
+- タイムライン更新: ファイル監視 (`watchdog` or `inotify`) で日報変更を検知 → SSE で差分を配信
+- ニュースフィード: 定期ポーリング → SSE で新着を配信
+- Rabbita 側: `@cmd.raw_effect` + JS の `EventSource` で SSE を受信（proxy パターンでは不可、JS FFI が必要）
+
+### SSE と Rabbita の接続
+
+`@cmd.raw_effect` の `scheduler.add` が外部パッケージから使えない問題がある。解決策:
+
+1. **JS FFI でグローバルコールバックを登録**: `window.__dispatch = (msg) => { ... }` を mount 時に登録し、EventSource の onmessage から呼ぶ
+2. **ポーリングフォールバック**: SSE が使えない場合は `@http.get` + `@rabbita.delay` で定期取得
+
+## タブ構成
+
+### DAILY（新規・最優先）
+
+- 今日の日報をパース → タイムライン表示（時刻 + テキスト）
+- SSE でリアルタイム更新
+- AI リアクション（一言コメント、関連 atom へのリンク）
+- 「N ヶ月前の今日」表示
+
+### FEED（新規）
+
+- 日報・atom のタグからトピックを抽出
+- HN / GitHub Trending / Zenn をフィルタ
+- SSE で新着配信
+- VT323 フォントでゆっくりスクロール
+
+### CLAUDE（移植済み）
+
+- Prometheus proxy 経由で Claude Code メトリクス表示
+
+### CI（プロトタイプ済み、MoonBit 未移植）
+
+- GitHub Actions ワークフロー監視
+- Happy Mac / Sad Mac アイコン
+
+### SYSTEM（プロトタイプ済み、MoonBit 未移植）
+
+- CPU / メモリ / ディスク / ネットワーク / プロセス
+
+## Tasks
+
+- [x] metrics-server: `/daily` エンドポイント（日報パース、タイムライン抽出、JSON 返却）
+- [x] metrics-server: `/daily/stream` SSE エンドポイント（ファイル監視 + 差分配信）
+- [x] MoonBit: SSE 受信の JS FFI ラッパー（EventSource + dispatch 連携）
+- [x] MoonBit: DAILY タブ — タイムライン表示（基本 UI）
+- [x] MoonBit: タブ切り替え機構（DAILY / CLAUDE）
+- [x] metrics-server: ThreadingHTTPServer 化（SSE がメインスレッドをブロックする問題の修正）
+- [ ] MoonBit: DAILY タブ — SSE リアルタイム更新の安定化（現在 warning あり）
+- [ ] metrics-server: `/daily/reaction` AI リアクション生成（LLM API 呼び出し）
+- [ ] MoonBit: DAILY タブ — AI リアクション表示
+- [ ] MoonBit: DAILY タブ — 「N ヶ月前の今日」表示
+- [ ] metrics-server: `/feed` ニュースフィード集約エンドポイント
+- [ ] metrics-server: `/feed/stream` SSE ニュース配信
+- [ ] MoonBit: FEED タブ — ニュース表示 + スクロール
+- [ ] MoonBit: CI タブ移植（vanilla JS → MoonBit）
+- [ ] MoonBit: SYSTEM タブ移植（vanilla JS → MoonBit）
