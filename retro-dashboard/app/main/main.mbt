@@ -36,7 +36,6 @@ enum Msg {
   PollDaily
   GotDaily(@daily.DailyNote)
   DailyErr(String)
-  DailySSEUpdate(String)
   // Claude
   PollClaude
   GotClaude(@prometheus.ClaudeMetrics)
@@ -67,23 +66,11 @@ fn update(dispatch : @rabbita.Dispatch[Msg], msg : Msg, model : Model) -> (@rabb
           @daily.decode_daily,
         ),
       )
-      (cmd, model)
+      let next = @rabbita.delay(dispatch(PollDaily), 10_000)
+      (@rabbita.batch([cmd, next]), model)
     }
     GotDaily(d) => (@rabbita.none, { ..model, daily: DailyLoaded(d) })
     DailyErr(e) => (@rabbita.none, { ..model, daily: DailyError(e) })
-    DailySSEUpdate(json_str) => {
-      let result = try {
-        let json = @json.parse(json_str)
-        let d : @daily.DailyNote = @json.from_json(json)
-        Ok(d)
-      } catch {
-        e => Err(e.to_string())
-      }
-      match result {
-        Ok(d) => (@rabbita.none, { ..model, daily: DailyLoaded(d) })
-        Err(_) => (@rabbita.none, model)
-      }
-    }
 
     // Claude
     PollClaude => {
@@ -317,21 +304,6 @@ fn counter_item(value : String, label : String) -> @html.Html {
 extern "js" fn get_time_string() -> String =
   #|() => new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
-/// Register a global SSE listener that dispatches DailySSEUpdate messages.
-/// This works around Rabbita's raw_effect/scheduler.add internal visibility constraint.
-fn setup_daily_sse(dispatch : @rabbita.Dispatch[Msg]) -> Unit {
-  js_setup_sse(fn(data) { dispatch(DailySSEUpdate(data)) |> ignore })
-}
-
-extern "js" fn js_setup_sse(on_message : (String) -> Unit) -> Unit =
-  #|(onMsg) => {
-  #|  if (window.__dailySSE) window.__dailySSE.close();
-  #|  const es = new EventSource('http://127.0.0.1:8721/daily/stream');
-  #|  es.onmessage = (e) => onMsg(e.data);
-  #|  es.onerror = () => console.warn('SSE reconnecting...');
-  #|  window.__dailySSE = es;
-  #|}
-
 // --- Main ---
 
 fn main {
@@ -353,6 +325,5 @@ fn main {
       dispatch(PollClaude),
     ]),
   )
-  setup_daily_sse(dispatch)
   app.mount("app")
 }

@@ -16,6 +16,27 @@ retro-dashboard は MoonBit + Rabbita (TEA) で構築する。
 | `*_test.mbt` | Black-box テスト（公開メンバーのみ） |
 | `*_wbtest.mbt` | White-box テスト（非公開メンバーも可） |
 
+## 実践で判明した注意点
+
+### 構文
+
+- `using @pkg { items }` — `@pkg` と `{` の間にドットを入れない（`@pkg.{...}` は構文エラー）
+- ラベル引数: 定義は `param~`、呼び出しは `param=value`。`param~=value` は不正
+- `f!(args)` は非推奨。`f(args)` に統一（エラーは `try`/`catch` で処理）
+
+### Rabbita
+
+- HTML 要素は子要素（positional argument）が必須。空の div は `@html.div("")` とする
+- `@cmd.raw_effect` のコールバック内で `scheduler.add(cmd)` を使って Cmd を登録する必要がある。ただし `Scheduler` trait は `internal/runtime` パッケージにあり、**外部パッケージからは `scheduler.add()` を呼べない**（internal visibility 制約）
+- 外部 API 呼び出しは `@http.get` + proxy サーバー経由が安全なパターン。`raw_effect` + JS FFI でコールバックを渡す方式は internal パッケージ制約により困難
+- **`dispatch(msg)` は Cmd を返すだけで、副作用（inbox への push）は `Scheduler::add` で実行されるまで発生しない**。JS FFI コールバック内で `dispatch(msg) |> ignore` しても**メッセージは届かない**。SSE 等の外部イベントからメッセージを送るには `@http.get` ポーリングでフォールバックするか、Rabbita に SSE/Subscription の公開 API が追加されるのを待つ
+
+### JS FFI
+
+- MoonBit の struct を JS 側で `{ field: value }` として構築してコールバックに渡す方式は内部表現の不一致で失敗する
+- FFI の引数・返り値はプリミティブ型（Double, String, Bool）に限定するのが安全
+- 複雑なデータは JSON 文字列で渡して MoonBit 側で `FromJson` derive + `@json.from_json` でパースするか、proxy サーバーで集約して `@http.get` で取得する
+
 ## コーディングスタイル
 
 - 不変優先: `let` をデフォルト、`let mut` は必要時のみ
