@@ -9,3 +9,6 @@ __snapshot__/
 
 # Node
 node_modules/
+
+# Playwright MCP
+.playwright-mcp/
