@@ -1,0 +1,11 @@
+import {
+  "moonbit-community/rabbita",
+  "moonbit-community/rabbita/html",
+  "moonbit-community/rabbita/http",
+  "kzmshx/retro-dashboard/lib/prometheus",
+  "kzmshx/retro-dashboard/lib/format",
+}
+
+options(
+  "is-main": true,
+)

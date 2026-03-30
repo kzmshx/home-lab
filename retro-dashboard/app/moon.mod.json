@@ -1,0 +1,10 @@
+{
+  "name": "kzmshx/retro-dashboard",
+  "version": "0.1.0",
+  "deps": {
+    "moonbit-community/rabbita": "0.11.5"
+  },
+  "readme": "README.md",
+  "license": "MIT",
+  "preferred-target": "js"
+}

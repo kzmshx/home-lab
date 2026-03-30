@@ -1,3 +1,11 @@
 .env
 .DS_Store
 *.local
+
+# MoonBit
+.mooncakes/
+_build/
+__snapshot__/
+
+# Node
+node_modules/
