@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import subprocess
 import time
 import threading
 import urllib.request
@@ -152,6 +153,88 @@ class DailyWatcher:
 daily_watcher = None
 
 
+# --- AI Reaction (via claude -p) ---
+
+class ReactionCache:
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.last_mtime = 0
+        self.reactions = []
+        self.generating = False
+
+    def get_or_generate(self, daily_data):
+        path = get_daily_path()
+        if not os.path.exists(path):
+            return []
+
+        mtime = os.path.getmtime(path)
+        with self.lock:
+            if mtime == self.last_mtime and self.reactions:
+                return self.reactions
+            if self.generating:
+                return self.reactions
+
+        with self.lock:
+            self.generating = True
+
+        try:
+            reactions = generate_reactions(daily_data)
+            with self.lock:
+                self.reactions = reactions
+                self.last_mtime = mtime
+                self.generating = False
+            return reactions
+        except Exception as e:
+            print(f"Reaction generation failed: {e}")
+            with self.lock:
+                self.generating = False
+            return self.reactions
+
+
+def generate_reactions(daily_data):
+    timeline = daily_data.get("timeline", [])
+    if not timeline:
+        return []
+
+    timeline_text = "\n".join(
+        f"- {e['time']} {e['text']}" for e in timeline
+    )
+
+    prompt = f"""以下は今日の日報タイムラインです。各エントリに対して、短い一言リアクション（10-20文字程度）を返してください。
+共感、応援、ツッコミ、気づきなど、友人のような自然なトーンで。
+
+JSON配列で返してください。各要素は {{"time": "HH:MM", "reaction": "リアクション"}} の形式です。
+JSON以外の文字列は含めないでください。
+
+タイムライン:
+{timeline_text}"""
+
+    try:
+        result = subprocess.run(
+            ["claude", "-p", prompt, "--output-format", "text"],
+            capture_output=True, text=True, timeout=60,
+        )
+        if result.returncode != 0:
+            print(f"claude -p failed: {result.stderr[:200]}")
+            return []
+
+        text = result.stdout.strip()
+        if text.startswith("```"):
+            text = re.sub(r"^```\w*\n?", "", text)
+            text = re.sub(r"\n?```$", "", text)
+
+        return json.loads(text)
+    except subprocess.TimeoutExpired:
+        print("claude -p timed out")
+        return []
+    except (json.JSONDecodeError, Exception) as e:
+        print(f"Failed to parse reaction: {e}")
+        return []
+
+
+reaction_cache = None
+
+
 # --- Prometheus proxy ---
 
 def prom_query(expr):
@@ -270,6 +353,10 @@ class MetricsHandler(BaseHTTPRequestHandler):
             self._json_response(get_claude_metrics())
         elif self.path == "/daily":
             self._json_response(parse_daily(get_daily_path()))
+        elif self.path == "/daily/reaction":
+            daily_data = parse_daily(get_daily_path())
+            reactions = reaction_cache.get_or_generate(daily_data)
+            self._json_response(reactions)
         elif self.path == "/daily/stream":
             self._sse_response()
         else:
@@ -316,6 +403,7 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
 if __name__ == "__main__":
     psutil.cpu_percent(interval=None, percpu=True)
     daily_watcher = DailyWatcher()
+    reaction_cache = ReactionCache()
     port = 8721
     server = ThreadingHTTPServer(("127.0.0.1", port), MetricsHandler)
     print(f"Retro Dashboard BFF listening on http://127.0.0.1:{port}")

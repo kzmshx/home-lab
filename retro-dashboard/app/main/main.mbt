@@ -12,6 +12,7 @@ struct Model {
   clock : String
   tab : Tab
   daily : DailyState
+  reactions : Array[@daily.Reaction]
   claude : ClaudeState
 } derive(Show)
 
@@ -36,6 +37,8 @@ enum Msg {
   PollDaily
   GotDaily(@daily.DailyNote)
   DailyErr(String)
+  PollReactions
+  GotReactions(Array[@daily.Reaction])
   // Claude
   PollClaude
   GotClaude(@prometheus.ClaudeMetrics)
@@ -69,8 +72,24 @@ fn update(dispatch : @rabbita.Dispatch[Msg], msg : Msg, model : Model) -> (@rabb
       let next = @rabbita.delay(dispatch(PollDaily), 10_000)
       (@rabbita.batch([cmd, next]), model)
     }
-    GotDaily(d) => (@rabbita.none, { ..model, daily: DailyLoaded(d) })
+    GotDaily(d) => (dispatch(PollReactions), { ..model, daily: DailyLoaded(d) })
     DailyErr(e) => (@rabbita.none, { ..model, daily: DailyError(e) })
+    PollReactions => {
+      let cmd = @http.get(
+        "http://127.0.0.1:8721/daily/reaction",
+        expect=Json(
+          fn(result) {
+            match result {
+              Ok(r) => dispatch(GotReactions(r))
+              Err(_) => dispatch(GotReactions([]))
+            }
+          },
+          @daily.decode_reactions,
+        ),
+      )
+      (cmd, model)
+    }
+    GotReactions(r) => (@rabbita.none, { ..model, reactions: r })
 
     // Claude
     PollClaude => {
@@ -100,7 +119,7 @@ fn view(dispatch : @rabbita.Dispatch[Msg], model : Model) -> @html.Html {
   @html.div([
     view_header(dispatch, model),
     match model.tab {
-      Daily => view_daily(model.daily)
+      Daily => view_daily(model.daily, model.reactions)
       Claude => view_claude(model.claude)
     },
     view_footer(),
@@ -145,19 +164,20 @@ fn view_footer() -> @html.Html {
 
 // --- Daily view ---
 
-fn view_daily(state : DailyState) -> @html.Html {
+fn view_daily(state : DailyState, reactions : Array[@daily.Reaction]) -> @html.Html {
   match state {
     DailyLoading => @html.div(class="loading glow", "LOADING...")
     DailyError(e) => @html.div(class="loading error glow", "ERROR: \{e}")
-    DailyLoaded(note) => view_daily_loaded(note)
+    DailyLoaded(note) => view_daily_loaded(note, reactions)
   }
 }
 
-fn view_daily_loaded(note : @daily.DailyNote) -> @html.Html {
+fn view_daily_loaded(note : @daily.DailyNote, reactions : Array[@daily.Reaction]) -> @html.Html {
+  let reaction_map : Map[String, String] = {}
+  reactions.each(fn(r) { reaction_map[r.time] = r.reaction })
   @html.div(
     class="daily-view",
     [
-      // Date header
       @html.div(
         class="daily-date",
         [
@@ -170,21 +190,30 @@ fn view_daily_loaded(note : @daily.DailyNote) -> @html.Html {
           },
         ],
       ),
-      // Timeline
       @html.div(
         class="timeline",
-        note.timeline.map(view_timeline_entry),
+        note.timeline.map(fn(entry) { view_timeline_entry(entry, reaction_map) }),
       ),
     ],
   )
 }
 
-fn view_timeline_entry(entry : @daily.TimelineEntry) -> @html.Html {
+fn view_timeline_entry(entry : @daily.TimelineEntry, reactions : Map[String, String]) -> @html.Html {
+  let reaction = reactions.get(entry.time)
   @html.div(
     class="timeline-entry",
     [
       @html.span(class="timeline-time glow", entry.time),
-      @html.span(class="timeline-text", entry.text),
+      @html.div(
+        class="timeline-content",
+        [
+          @html.span(class="timeline-text", entry.text),
+          match reaction {
+            Some(r) => @html.div(class="timeline-reaction", "> \{r}")
+            None => @html.nothing
+          },
+        ],
+      ),
     ],
   )
 }
@@ -312,6 +341,7 @@ fn main {
       clock: get_time_string(),
       tab: Daily,
       daily: DailyLoading,
+      reactions: [],
       claude: ClaudeLoading,
     },
     update=update,

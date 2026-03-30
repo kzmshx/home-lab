@@ -13,10 +13,24 @@ pub struct DailyNote {
   reflection : String
 } derive(Show, Eq, FromJson, ToJson)
 
+pub struct Reaction {
+  time : String
+  reaction : String
+} derive(Show, Eq, FromJson, ToJson)
+
 pub fn decode_daily(json : Json) -> Result[DailyNote, String] {
   try {
     let d : DailyNote = @json.from_json(json)
     Ok(d)
+  } catch {
+    e => Err(e.to_string())
+  }
+}
+
+pub fn decode_reactions(json : Json) -> Result[Array[Reaction], String] {
+  try {
+    let r : Array[Reaction] = @json.from_json(json)
+    Ok(r)
   } catch {
     e => Err(e.to_string())
   }
