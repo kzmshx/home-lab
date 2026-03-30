@@ -163,49 +163,61 @@ fn update(dispatch : @rabbita.Dispatch[Msg], msg : Msg, model : Model) -> (@rabb
 
 fn view(dispatch : @rabbita.Dispatch[Msg], model : Model) -> @html.Html {
   @html.div([
-    view_header(dispatch, model),
-    match model.tab {
-      Daily => view_daily(model.daily, model.reactions, model.past)
-      Claude => view_claude(model.claude)
-      Feed => view_feed(model.feed)
-    },
-    view_footer(),
+    view_menu_bar(dispatch, model),
+    @html.div(
+      class="window",
+      [
+        view_window_title_bar(model),
+        @html.div(
+          class="window-body",
+          [
+            match model.tab {
+              Daily => view_daily(model.daily, model.reactions, model.past)
+              Claude => view_claude(model.claude)
+              Feed => view_feed(model.feed)
+            },
+          ],
+        ),
+      ],
+    ),
   ])
 }
 
-fn view_header(dispatch : @rabbita.Dispatch[Msg], model : Model) -> @html.Html {
+fn view_menu_bar(dispatch : @rabbita.Dispatch[Msg], model : Model) -> @html.Html {
   @html.div(
-    class="header",
+    class="menu-bar",
     [
-      @html.div(
-        style=["display: flex; gap: 24px; align-items: center"],
-        [
-          tab_link(dispatch, "DAILY", Daily, model.tab),
-          tab_link(dispatch, "CLAUDE", Claude, model.tab),
-          tab_link(dispatch, "FEED", Feed, model.tab),
-        ],
-      ),
-      @html.span(class="clock glow", model.clock),
+      @html.span(class="menu-apple", "◆"),
+      menu_item(dispatch, "Daily", Daily, model.tab),
+      menu_item(dispatch, "Claude", Claude, model.tab),
+      menu_item(dispatch, "Feed", Feed, model.tab),
+      @html.span(class="menu-spacer", ""),
+      @html.span(class="menu-clock", model.clock),
     ],
   )
 }
 
-fn tab_link(dispatch : @rabbita.Dispatch[Msg], label : String, tab : Tab, current : Tab) -> @html.Html {
-  let cls = if tab == current { "tab glow" } else { "tab tab-inactive" }
+fn menu_item(dispatch : @rabbita.Dispatch[Msg], label : String, tab : Tab, current : Tab) -> @html.Html {
+  let cls = if tab == current { "menu-item menu-item-active" } else { "menu-item" }
   @html.div(
     class=cls,
-    style=["cursor: pointer; display: inline"],
+    style=["display: inline"],
     on_click=dispatch(SwitchTab(tab)),
     label,
   )
 }
 
-fn view_footer() -> @html.Html {
+fn view_window_title_bar(model : Model) -> @html.Html {
+  let title = match model.tab {
+    Daily => "Daily Note"
+    Claude => "Claude Code Monitor"
+    Feed => "News Feed"
+  }
   @html.div(
-    class="footer",
+    class="window-title-bar",
     [
-      @html.span("RETRO DASHBOARD"),
-      @html.span(get_time_string()),
+      @html.div(class="window-close", ""),
+      @html.span(class="window-title", title),
     ],
   )
 }
@@ -214,8 +226,8 @@ fn view_footer() -> @html.Html {
 
 fn view_daily(state : DailyState, reactions : Array[@daily.Reaction], past : Array[@daily.PastDaily]) -> @html.Html {
   match state {
-    DailyLoading => @html.div(class="loading glow", "LOADING...")
-    DailyError(e) => @html.div(class="loading error glow", "ERROR: \{e}")
+    DailyLoading => @html.div(class="loading", "LOADING...")
+    DailyError(e) => @html.div(class="loading error", "ERROR: \{e}")
     DailyLoaded(note) => view_daily_loaded(note, reactions, past)
   }
 }
@@ -229,7 +241,7 @@ fn view_daily_loaded(note : @daily.DailyNote, reactions : Array[@daily.Reaction]
       @html.div(
         class="daily-date",
         [
-          @html.span(class="glow", note.date),
+          @html.span(class="daily-date-text", note.date),
           if note.plan.length() > 0 {
             let first_line = note.plan.split("\n").next().unwrap_or("")
             @html.span(class="daily-plan", " | \{first_line}")
@@ -266,7 +278,7 @@ fn view_past(past : Array[@daily.PastDaily]) -> @html.Html {
           @html.div(
             class="past-item",
             [
-              @html.span(class="past-label glow", label),
+              @html.span(class="past-label", label),
               @html.span(class="past-date", p.date),
               @html.div(class="past-preview", preview),
             ],
@@ -282,7 +294,7 @@ fn view_timeline_entry(entry : @daily.TimelineEntry, reactions : Map[String, Str
   @html.div(
     class="timeline-entry",
     [
-      @html.span(class="timeline-time glow", entry.time),
+      @html.span(class="timeline-time", entry.time),
       @html.div(
         class="timeline-content",
         [
@@ -301,7 +313,7 @@ fn view_timeline_entry(entry : @daily.TimelineEntry, reactions : Map[String, Str
 
 fn view_feed(items : Array[@feed.FeedItem]) -> @html.Html {
   if items.length() == 0 {
-    return @html.div(class="loading glow", "LOADING FEED...")
+    return @html.div(class="loading", "LOADING FEED...")
   }
   @html.div(
     class="feed-view",
@@ -335,8 +347,8 @@ fn view_feed(items : Array[@feed.FeedItem]) -> @html.Html {
 
 fn view_claude(state : ClaudeState) -> @html.Html {
   match state {
-    ClaudeLoading => @html.div(class="loading glow", "LOADING...")
-    ClaudeError(e) => @html.div(class="loading error glow", "ERROR: \{e}")
+    ClaudeLoading => @html.div(class="loading", "LOADING...")
+    ClaudeError(e) => @html.div(class="loading error", "ERROR: \{e}")
     ClaudeLoaded(m) => view_claude_loaded(m)
   }
 }
@@ -349,13 +361,13 @@ fn view_claude_loaded(m : @prometheus.ClaudeMetrics) -> @html.Html {
         class="cost-panel",
         [
           @html.div([
-            @html.div(class="cost-total glow", "$\{@format.fixed(m.cost_total, 2)}"),
+            @html.div(class="cost-total", "$\{@format.fixed(m.cost_total, 2)}"),
             @html.div(class="cost-label", "TOTAL COST (ALL TIME)"),
           ]),
           @html.div(
             style=["text-align: right"],
             [
-              @html.div(class="cost-period glow", "$\{@format.fixed(m.cost_period, 2)}"),
+              @html.div(class="cost-period", "$\{@format.fixed(m.cost_period, 2)}"),
               @html.div(class="cost-label", "LAST 24H"),
             ],
           ),
@@ -367,10 +379,7 @@ fn view_claude_loaded(m : @prometheus.ClaudeMetrics) -> @html.Html {
         class="session-panel",
         [
           @html.span(class="model-badge", "OPUS 4.6"),
-          @html.span(
-            style=["color: var(--green-dim); font-size: 16px"],
-            "\{m.pull_requests.to_int()} PRs CREATED",
-          ),
+          @html.span(class="session-info", "\{m.pull_requests.to_int()} PRs CREATED"),
         ],
       ),
     ],
@@ -380,7 +389,7 @@ fn view_claude_loaded(m : @prometheus.ClaudeMetrics) -> @html.Html {
 fn view_token_panel(m : @prometheus.ClaudeMetrics) -> @html.Html {
   let total = m.tokens_input + m.tokens_output + m.tokens_cache_read + m.tokens_cache_creation
   @html.div(
-    class="token-panel",
+    class="panel",
     [
       @html.h2("TOKENS"),
       token_row("INPUT", @format.token_count(m.tokens_input)),
@@ -418,7 +427,7 @@ fn view_token_bar(m : @prometheus.ClaudeMetrics, total : Double) -> @html.Html {
 
 fn view_activity_panel(m : @prometheus.ClaudeMetrics) -> @html.Html {
   @html.div(
-    class="activity-panel",
+    class="panel",
     [
       @html.h2("ACTIVITY"),
       @html.div(
@@ -437,7 +446,7 @@ fn view_activity_panel(m : @prometheus.ClaudeMetrics) -> @html.Html {
 fn counter_item(value : String, label : String) -> @html.Html {
   @html.div(
     class="counter-item",
-    [@html.div(class="counter-value glow", value), @html.div(class="counter-label", label)],
+    [@html.div(class="counter-value", value), @html.div(class="counter-label", label)],
   )
 }
 
