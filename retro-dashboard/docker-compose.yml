@@ -1,7 +1,0 @@
-services:
-  web:
-    image: nginx:alpine
-    ports:
-      - "8720:80"
-    volumes:
-      - ./src:/usr/share/nginx/html:ro
