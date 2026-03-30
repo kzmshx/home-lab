@@ -1,6 +1,6 @@
 /* Retro CRT Dashboard — 1280x720 target */
 
-@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=VT323&family=DotGothic16&display=swap');
 
 :root {
   --green: #33ff33;
@@ -18,13 +18,13 @@
 }
 
 body {
-  width: 1280px;
-  height: 720px;
+  width: 100%;
+  height: 100vh;
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
-  font-family: 'VT323', monospace;
-  font-size: 20px;
+  font-family: 'VT323', 'DotGothic16', monospace;
+  font-size: 16px;
   line-height: 1.4;
 }
 
@@ -130,7 +130,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: calc(720px - 61px - 25px);
+  height: calc(100vh - 61px - 25px);
   font-size: 24px;
 }
 
@@ -145,7 +145,7 @@ body {
   grid-template-rows: auto auto 1fr;
   gap: 16px;
   padding: 16px 24px;
-  height: calc(720px - 61px - 25px);
+  height: calc(100vh - 61px - 25px);
   overflow: hidden;
 }
 
@@ -266,7 +266,7 @@ body {
 /* Daily view */
 .daily-view {
   padding: 16px 24px;
-  height: calc(720px - 61px - 25px);
+  height: calc(100vh - 61px - 25px);
   overflow-y: auto;
 }
 
@@ -297,8 +297,8 @@ body {
 
 .timeline-time {
   flex-shrink: 0;
-  width: 60px;
-  font-size: 20px;
+  width: 50px;
+  font-size: 16px;
 }
 
 .timeline-content {
@@ -307,13 +307,13 @@ body {
 }
 
 .timeline-text {
-  font-size: 18px;
+  font-size: 15px;
   line-height: 1.5;
   color: var(--green);
 }
 
 .timeline-reaction {
-  font-size: 16px;
+  font-size: 14px;
   color: var(--amber);
   margin-top: 2px;
   font-style: italic;
@@ -368,7 +368,7 @@ body {
 /* Feed */
 .feed-view {
   padding: 16px 24px;
-  height: calc(720px - 61px - 25px);
+  height: calc(100vh - 61px - 25px);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
