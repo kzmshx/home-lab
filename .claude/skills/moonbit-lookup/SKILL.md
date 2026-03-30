@@ -20,15 +20,15 @@ MoonBit の言語仕様・ライブラリ API を調査する。
 まずローカルのリファレンスドキュメントを検索する:
 
 ```
-atoms/artifacts/drafts/MoonBit Language Reference.md      — 言語仕様全般
-atoms/artifacts/drafts/MoonBit テスティングパターン調査レポート.md  — テスト
-atoms/artifacts/drafts/Rabbita Web Framework API Reference.md  — Rabbita API
+.claude/skills/moonbit-lookup/moonbit-language-reference.md  — 言語仕様全般
+.claude/skills/moonbit-lookup/moonbit-testing-patterns.md    — テスト
+.claude/skills/moonbit-lookup/rabbita-api-reference.md       — Rabbita API
 ```
 
 Grep で該当セクションを探す:
 
 ```bash
-grep -n "<キーワード>" "atoms/artifacts/drafts/MoonBit Language Reference.md"
+grep -n "<キーワード>" ".claude/skills/moonbit-lookup/moonbit-language-reference.md"
 ```
 
 ### 2. ツールチェインヘルプ

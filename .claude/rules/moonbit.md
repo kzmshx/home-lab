@@ -141,9 +141,9 @@ npm run build                # プロダクションビルド
 
 詳細な言語仕様・API は以下を参照:
 
-- `atoms/artifacts/drafts/MoonBit Language Reference.md` — 言語リファレンス
-- `atoms/artifacts/drafts/MoonBit テスティングパターン調査レポート.md` — テストパターン
-- `atoms/artifacts/drafts/Rabbita Web Framework API Reference.md` — Rabbita API
+- `.claude/skills/moonbit-lookup/moonbit-language-reference.md` — 言語リファレンス
+- `.claude/skills/moonbit-lookup/moonbit-testing-patterns.md` — テストパターン
+- `.claude/skills/moonbit-lookup/rabbita-api-reference.md` — Rabbita API
 
 ## 知識が不足している場合
 
