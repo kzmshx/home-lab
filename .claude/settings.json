@@ -51,11 +51,13 @@
       "WebFetch",
       "WebSearch"
     ],
+    "ask": [
+      "Bash(gh pr create *)",
+      "Bash(git push *)"
+    ],
     "deny": [
       "Bash(gh issue create *)",
-      "Bash(gh pr create *)",
-      "Bash(gh pr merge *)",
-      "Bash(git push *)"
+      "Bash(gh pr merge *)"
     ]
   },
   "hooks": {
