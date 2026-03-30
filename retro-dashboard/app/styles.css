@@ -101,6 +101,17 @@ body {
   font-size: 24px;
 }
 
+/* Tabs */
+.tab {
+  font-size: 28px;
+  letter-spacing: 2px;
+}
+
+.tab-inactive {
+  color: var(--green-dim);
+  text-shadow: none;
+}
+
 /* Footer */
 .footer {
   position: fixed;
@@ -250,4 +261,48 @@ body {
   border: 1px solid var(--green-dim);
   padding: 4px 12px;
   font-size: 16px;
+}
+
+/* Daily view */
+.daily-view {
+  padding: 16px 24px;
+  height: calc(720px - 61px - 25px);
+  overflow-y: auto;
+}
+
+.daily-date {
+  font-size: 22px;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--green-dim);
+}
+
+.daily-plan {
+  color: var(--green-dim);
+  font-size: 18px;
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.timeline-entry {
+  display: flex;
+  gap: 16px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(51, 255, 51, 0.05);
+}
+
+.timeline-time {
+  flex-shrink: 0;
+  width: 60px;
+  font-size: 20px;
+}
+
+.timeline-text {
+  font-size: 18px;
+  line-height: 1.5;
+  color: var(--green);
 }

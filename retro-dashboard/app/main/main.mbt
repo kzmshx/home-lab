@@ -3,24 +3,44 @@
 
 // --- Model ---
 
+enum Tab {
+  Daily
+  Claude
+} derive(Show, Eq)
+
 struct Model {
   clock : String
-  metrics : MetricsState
+  tab : Tab
+  daily : DailyState
+  claude : ClaudeState
 } derive(Show)
 
-enum MetricsState {
-  Loading
-  Loaded(@prometheus.ClaudeMetrics)
-  Error(String)
+enum DailyState {
+  DailyLoading
+  DailyLoaded(@daily.DailyNote)
+  DailyError(String)
+} derive(Show)
+
+enum ClaudeState {
+  ClaudeLoading
+  ClaudeLoaded(@prometheus.ClaudeMetrics)
+  ClaudeError(String)
 } derive(Show)
 
 // --- Msg ---
 
 enum Msg {
   Tick
-  PollMetrics
-  GotMetrics(@prometheus.ClaudeMetrics)
-  MetricsError(String)
+  SwitchTab(Tab)
+  // Daily
+  PollDaily
+  GotDaily(@daily.DailyNote)
+  DailyErr(String)
+  DailySSEUpdate(String)
+  // Claude
+  PollClaude
+  GotClaude(@prometheus.ClaudeMetrics)
+  ClaudeErr(String)
 }
 
 // --- Update ---
@@ -31,44 +51,98 @@ fn update(dispatch : @rabbita.Dispatch[Msg], msg : Msg, model : Model) -> (@rabb
       @rabbita.delay(dispatch(Tick), 1000),
       { ..model, clock: get_time_string() },
     )
-    PollMetrics => {
+    SwitchTab(tab) => (@rabbita.none, { ..model, tab, })
+
+    // Daily
+    PollDaily => {
+      let cmd = @http.get(
+        "http://127.0.0.1:8721/daily",
+        expect=Json(
+          fn(result) {
+            match result {
+              Ok(d) => dispatch(GotDaily(d))
+              Err(e) => dispatch(DailyErr(e))
+            }
+          },
+          @daily.decode_daily,
+        ),
+      )
+      (cmd, model)
+    }
+    GotDaily(d) => (@rabbita.none, { ..model, daily: DailyLoaded(d) })
+    DailyErr(e) => (@rabbita.none, { ..model, daily: DailyError(e) })
+    DailySSEUpdate(json_str) => {
+      let result = try {
+        let json = @json.parse(json_str)
+        let d : @daily.DailyNote = @json.from_json(json)
+        Ok(d)
+      } catch {
+        e => Err(e.to_string())
+      }
+      match result {
+        Ok(d) => (@rabbita.none, { ..model, daily: DailyLoaded(d) })
+        Err(_) => (@rabbita.none, model)
+      }
+    }
+
+    // Claude
+    PollClaude => {
       let cmd = @http.get(
         "http://127.0.0.1:8721/claude-metrics",
         expect=Json(
           fn(result) {
             match result {
-              Ok(m) => dispatch(GotMetrics(m))
-              Err(e) => dispatch(MetricsError(e))
+              Ok(m) => dispatch(GotClaude(m))
+              Err(e) => dispatch(ClaudeErr(e))
             }
           },
           @prometheus.decode_metrics,
         ),
       )
-      let next_poll = @rabbita.delay(dispatch(PollMetrics), 10_000)
-      (@rabbita.batch([cmd, next_poll]), model)
+      let next = @rabbita.delay(dispatch(PollClaude), 10_000)
+      (@rabbita.batch([cmd, next]), model)
     }
-    GotMetrics(m) => (@rabbita.none, { ..model, metrics: Loaded(m) })
-    MetricsError(e) => (@rabbita.none, { ..model, metrics: Error(e) })
+    GotClaude(m) => (@rabbita.none, { ..model, claude: ClaudeLoaded(m) })
+    ClaudeErr(e) => (@rabbita.none, { ..model, claude: ClaudeError(e) })
   }
 }
 
 // --- View ---
 
-fn view(_dispatch : @rabbita.Dispatch[Msg], model : Model) -> @html.Html {
+fn view(dispatch : @rabbita.Dispatch[Msg], model : Model) -> @html.Html {
   @html.div([
-    view_header(model.clock),
-    view_claude(model.metrics),
+    view_header(dispatch, model),
+    match model.tab {
+      Daily => view_daily(model.daily)
+      Claude => view_claude(model.claude)
+    },
     view_footer(),
   ])
 }
 
-fn view_header(clock : String) -> @html.Html {
+fn view_header(dispatch : @rabbita.Dispatch[Msg], model : Model) -> @html.Html {
   @html.div(
     class="header",
     [
-      @html.h1(class="glow", "CLAUDE"),
-      @html.span(class="clock glow", clock),
+      @html.div(
+        style=["display: flex; gap: 24px; align-items: center"],
+        [
+          tab_link(dispatch, "DAILY", Daily, model.tab),
+          tab_link(dispatch, "CLAUDE", Claude, model.tab),
+        ],
+      ),
+      @html.span(class="clock glow", model.clock),
     ],
+  )
+}
+
+fn tab_link(dispatch : @rabbita.Dispatch[Msg], label : String, tab : Tab, current : Tab) -> @html.Html {
+  let cls = if tab == current { "tab glow" } else { "tab tab-inactive" }
+  @html.div(
+    class=cls,
+    style=["cursor: pointer; display: inline"],
+    on_click=dispatch(SwitchTab(tab)),
+    label,
   )
 }
 
@@ -76,17 +150,65 @@ fn view_footer() -> @html.Html {
   @html.div(
     class="footer",
     [
-      @html.span("POLL: 10s"),
-      @html.span(class="footer-right", get_time_string()),
+      @html.span("RETRO DASHBOARD"),
+      @html.span(get_time_string()),
     ],
   )
 }
 
-fn view_claude(state : MetricsState) -> @html.Html {
+// --- Daily view ---
+
+fn view_daily(state : DailyState) -> @html.Html {
   match state {
-    Loading => @html.div(class="loading glow", "LOADING...")
-    Error(e) => @html.div(class="loading error glow", "ERROR: \{e}")
-    Loaded(m) => view_claude_loaded(m)
+    DailyLoading => @html.div(class="loading glow", "LOADING...")
+    DailyError(e) => @html.div(class="loading error glow", "ERROR: \{e}")
+    DailyLoaded(note) => view_daily_loaded(note)
+  }
+}
+
+fn view_daily_loaded(note : @daily.DailyNote) -> @html.Html {
+  @html.div(
+    class="daily-view",
+    [
+      // Date header
+      @html.div(
+        class="daily-date",
+        [
+          @html.span(class="glow", note.date),
+          if note.plan.length() > 0 {
+            let first_line = note.plan.split("\n").next().unwrap_or("")
+            @html.span(class="daily-plan", " | \{first_line}")
+          } else {
+            @html.nothing
+          },
+        ],
+      ),
+      // Timeline
+      @html.div(
+        class="timeline",
+        note.timeline.map(view_timeline_entry),
+      ),
+    ],
+  )
+}
+
+fn view_timeline_entry(entry : @daily.TimelineEntry) -> @html.Html {
+  @html.div(
+    class="timeline-entry",
+    [
+      @html.span(class="timeline-time glow", entry.time),
+      @html.span(class="timeline-text", entry.text),
+    ],
+  )
+}
+
+// --- Claude view ---
+
+fn view_claude(state : ClaudeState) -> @html.Html {
+  match state {
+    ClaudeLoading => @html.div(class="loading glow", "LOADING...")
+    ClaudeError(e) => @html.div(class="loading error glow", "ERROR: \{e}")
+    ClaudeLoaded(m) => view_claude_loaded(m)
   }
 }
 
@@ -94,7 +216,6 @@ fn view_claude_loaded(m : @prometheus.ClaudeMetrics) -> @html.Html {
   @html.div(
     class="claude-monitor",
     [
-      // Cost panel
       @html.div(
         class="cost-panel",
         [
@@ -111,11 +232,8 @@ fn view_claude_loaded(m : @prometheus.ClaudeMetrics) -> @html.Html {
           ),
         ],
       ),
-      // Token panel
       view_token_panel(m),
-      // Activity panel
       view_activity_panel(m),
-      // Session panel
       @html.div(
         class="session-panel",
         [
@@ -152,10 +270,7 @@ fn view_token_panel(m : @prometheus.ClaudeMetrics) -> @html.Html {
 fn token_row(label : String, value : String) -> @html.Html {
   @html.div(
     class="token-row",
-    [
-      @html.span(class="token-label", label),
-      @html.span(class="token-value", value),
-    ],
+    [@html.span(class="token-label", label), @html.span(class="token-value", value)],
   )
 }
 
@@ -193,10 +308,7 @@ fn view_activity_panel(m : @prometheus.ClaudeMetrics) -> @html.Html {
 fn counter_item(value : String, label : String) -> @html.Html {
   @html.div(
     class="counter-item",
-    [
-      @html.div(class="counter-value glow", value),
-      @html.div(class="counter-label", label),
-    ],
+    [@html.div(class="counter-value glow", value), @html.div(class="counter-label", label)],
   )
 }
 
@@ -205,11 +317,31 @@ fn counter_item(value : String, label : String) -> @html.Html {
 extern "js" fn get_time_string() -> String =
   #|() => new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
+/// Register a global SSE listener that dispatches DailySSEUpdate messages.
+/// This works around Rabbita's raw_effect/scheduler.add internal visibility constraint.
+fn setup_daily_sse(dispatch : @rabbita.Dispatch[Msg]) -> Unit {
+  js_setup_sse(fn(data) { dispatch(DailySSEUpdate(data)) |> ignore })
+}
+
+extern "js" fn js_setup_sse(on_message : (String) -> Unit) -> Unit =
+  #|(onMsg) => {
+  #|  if (window.__dailySSE) window.__dailySSE.close();
+  #|  const es = new EventSource('http://127.0.0.1:8721/daily/stream');
+  #|  es.onmessage = (e) => onMsg(e.data);
+  #|  es.onerror = () => console.warn('SSE reconnecting...');
+  #|  window.__dailySSE = es;
+  #|}
+
 // --- Main ---
 
 fn main {
   let (dispatch, cell) = @rabbita.cell_with_dispatch(
-    model={ clock: get_time_string(), metrics: Loading },
+    model={
+      clock: get_time_string(),
+      tab: Daily,
+      daily: DailyLoading,
+      claude: ClaudeLoading,
+    },
     update=update,
     view=view,
   )
@@ -217,8 +349,10 @@ fn main {
   app.with_init(
     @rabbita.batch([
       @rabbita.delay(dispatch(Tick), 1000),
-      dispatch(PollMetrics),
+      dispatch(PollDaily),
+      dispatch(PollClaude),
     ]),
   )
+  setup_daily_sse(dispatch)
   app.mount("app")
 }

@@ -1,15 +1,158 @@
-"""Lightweight system metrics + Prometheus proxy API server for retro-dashboard."""
+"""Retro Dashboard BFF — system metrics, Prometheus proxy, daily note parser, SSE."""
 
 import json
+import os
+import re
 import time
+import threading
 import urllib.request
 import urllib.parse
+from datetime import date
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 
 import psutil
 
+VAULT_PATH = os.path.expanduser("~/Documents/Obsidian/atoms")
 PROM_BASE = "http://localhost:9090/api/v1/query"
 
+
+# --- Daily note parser ---
+
+def get_daily_path(d=None):
+    d = d or date.today()
+    return os.path.join(VAULT_PATH, "daily", f"{d.isoformat()}.md")
+
+
+def parse_daily(path):
+    if not os.path.exists(path):
+        return {"date": date.today().isoformat(), "sections": {}, "timeline": []}
+
+    with open(path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    sections = {}
+    current_section = None
+    current_lines = []
+    in_frontmatter = False
+    frontmatter_done = False
+
+    for line in content.split("\n"):
+        if line.strip() == "---" and not frontmatter_done:
+            if in_frontmatter:
+                frontmatter_done = True
+            else:
+                in_frontmatter = True
+            continue
+        if in_frontmatter and not frontmatter_done:
+            continue
+
+        if line.startswith("## "):
+            if current_section:
+                sections[current_section] = "\n".join(current_lines)
+            current_section = line[3:].strip()
+            current_lines = []
+        elif current_section:
+            current_lines.append(line)
+
+    if current_section:
+        sections[current_section] = "\n".join(current_lines)
+
+    timeline = parse_timeline(sections.get("タイムライン", ""))
+
+    d_str = date.today().isoformat()
+    match = re.search(r"date:\s*(\S+)", content)
+    if match:
+        d_str = match.group(1)
+
+    return {
+        "date": d_str,
+        "sections": list(sections.keys()),
+        "timeline": timeline,
+        "plan": sections.get("今日は何する日？", "").strip(),
+        "reflection": sections.get("感想", "").strip(),
+    }
+
+
+def parse_timeline(text):
+    entries = []
+    current = None
+
+    for line in text.split("\n"):
+        m = re.match(r"^- (\d{1,2}:\d{2})\s+(.*)", line)
+        if m:
+            if current:
+                entries.append(current)
+            current = {"time": m.group(1), "text": m.group(2).strip()}
+        elif current and line.startswith("    "):
+            current["text"] += " " + line.strip()
+
+    if current:
+        entries.append(current)
+    return entries
+
+
+# --- Daily SSE (file watcher) ---
+
+class DailyWatcher:
+    def __init__(self):
+        self.subscribers = []
+        self.lock = threading.Lock()
+        self.last_mtime = 0
+        self.last_data = None
+        self.running = True
+        self.thread = threading.Thread(target=self._watch, daemon=True)
+        self.thread.start()
+
+    def _watch(self):
+        while self.running:
+            try:
+                path = get_daily_path()
+                if os.path.exists(path):
+                    mtime = os.path.getmtime(path)
+                    if mtime != self.last_mtime:
+                        self.last_mtime = mtime
+                        data = parse_daily(path)
+                        self.last_data = data
+                        self._notify(data)
+            except Exception as e:
+                print(f"Watcher error: {e}")
+            time.sleep(2)
+
+    def _notify(self, data):
+        payload = f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+        with self.lock:
+            dead = []
+            for wfile in self.subscribers:
+                try:
+                    wfile.write(payload.encode("utf-8"))
+                    wfile.flush()
+                except Exception:
+                    dead.append(wfile)
+            for w in dead:
+                self.subscribers.remove(w)
+
+    def subscribe(self, wfile):
+        with self.lock:
+            self.subscribers.append(wfile)
+        if self.last_data:
+            try:
+                payload = f"data: {json.dumps(self.last_data, ensure_ascii=False)}\n\n"
+                wfile.write(payload.encode("utf-8"))
+                wfile.flush()
+            except Exception:
+                pass
+
+    def unsubscribe(self, wfile):
+        with self.lock:
+            if wfile in self.subscribers:
+                self.subscribers.remove(wfile)
+
+
+daily_watcher = None
+
+
+# --- Prometheus proxy ---
 
 def prom_query(expr):
     url = f"{PROM_BASE}?query={urllib.parse.quote(expr)}"
@@ -65,6 +208,8 @@ def get_claude_metrics():
     }
 
 
+# --- System metrics ---
+
 def get_metrics():
     cpu_percent_per_core = psutil.cpu_percent(interval=None, percpu=True)
     cpu_percent_total = psutil.cpu_percent(interval=None)
@@ -115,22 +260,44 @@ def get_metrics():
     }
 
 
+# --- HTTP handler ---
+
 class MetricsHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/metrics":
-            data = get_metrics()
+            self._json_response(get_metrics())
         elif self.path == "/claude-metrics":
-            data = get_claude_metrics()
+            self._json_response(get_claude_metrics())
+        elif self.path == "/daily":
+            self._json_response(parse_daily(get_daily_path()))
+        elif self.path == "/daily/stream":
+            self._sse_response()
         else:
             self.send_response(404)
             self.end_headers()
-            return
 
+    def _json_response(self, data):
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
-        self.wfile.write(json.dumps(data).encode())
+        self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+
+    def _sse_response(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        daily_watcher.subscribe(self.wfile)
+        try:
+            while True:
+                time.sleep(1)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        finally:
+            daily_watcher.unsubscribe(self.wfile)
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -142,11 +309,18 @@ class MetricsHandler(BaseHTTPRequestHandler):
         pass
 
 
+class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
+
+
 if __name__ == "__main__":
     psutil.cpu_percent(interval=None, percpu=True)
+    daily_watcher = DailyWatcher()
     port = 8721
-    server = HTTPServer(("127.0.0.1", port), MetricsHandler)
-    print(f"Metrics server listening on http://127.0.0.1:{port}")
+    server = ThreadingHTTPServer(("127.0.0.1", port), MetricsHandler)
+    print(f"Retro Dashboard BFF listening on http://127.0.0.1:{port}")
     print(f"  /metrics        - system metrics")
     print(f"  /claude-metrics - Claude Code metrics (via Prometheus)")
+    print(f"  /daily          - today's daily note (JSON)")
+    print(f"  /daily/stream   - daily note SSE stream")
     server.serve_forever()
