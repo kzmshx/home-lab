@@ -235,6 +235,36 @@ JSON以外の文字列は含めないでください。
 reaction_cache = None
 
 
+# --- Past daily notes ("N months ago today") ---
+
+def get_past_dailies():
+    today = date.today()
+    offsets = [1, 3, 6, 12]
+    results = []
+    for months in offsets:
+        year = today.year
+        month = today.month - months
+        while month <= 0:
+            month += 12
+            year -= 1
+        day = min(today.day, 28)
+        try:
+            d = date(year, month, day)
+        except ValueError:
+            continue
+        path = get_daily_path(d)
+        if os.path.exists(path):
+            data = parse_daily(path)
+            if data.get("timeline"):
+                results.append({
+                    "months_ago": months,
+                    "date": d.isoformat(),
+                    "timeline": data["timeline"][:3],
+                    "plan": data.get("plan", ""),
+                })
+    return results
+
+
 # --- Prometheus proxy ---
 
 def prom_query(expr):
@@ -357,6 +387,8 @@ class MetricsHandler(BaseHTTPRequestHandler):
             daily_data = parse_daily(get_daily_path())
             reactions = reaction_cache.get_or_generate(daily_data)
             self._json_response(reactions)
+        elif self.path == "/daily/past":
+            self._json_response(get_past_dailies())
         elif self.path == "/daily/stream":
             self._sse_response()
         else:

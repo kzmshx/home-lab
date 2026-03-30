@@ -318,3 +318,49 @@ body {
   margin-top: 2px;
   font-style: italic;
 }
+
+/* Past dailies */
+.past-section {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--green-dim);
+}
+
+.past-title {
+  font-size: 18px;
+  font-weight: normal;
+  color: var(--green-dim);
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+}
+
+.past-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.past-item {
+  display: grid;
+  grid-template-columns: 70px 100px 1fr;
+  gap: 12px;
+  align-items: baseline;
+  padding: 4px 0;
+}
+
+.past-label {
+  font-size: 18px;
+}
+
+.past-date {
+  font-size: 16px;
+  color: var(--green-dim);
+}
+
+.past-preview {
+  font-size: 16px;
+  color: var(--green-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -13,6 +13,7 @@ struct Model {
   tab : Tab
   daily : DailyState
   reactions : Array[@daily.Reaction]
+  past : Array[@daily.PastDaily]
   claude : ClaudeState
 } derive(Show)
 
@@ -39,6 +40,8 @@ enum Msg {
   DailyErr(String)
   PollReactions
   GotReactions(Array[@daily.Reaction])
+  PollPast
+  GotPast(Array[@daily.PastDaily])
   // Claude
   PollClaude
   GotClaude(@prometheus.ClaudeMetrics)
@@ -72,7 +75,10 @@ fn update(dispatch : @rabbita.Dispatch[Msg], msg : Msg, model : Model) -> (@rabb
       let next = @rabbita.delay(dispatch(PollDaily), 10_000)
       (@rabbita.batch([cmd, next]), model)
     }
-    GotDaily(d) => (dispatch(PollReactions), { ..model, daily: DailyLoaded(d) })
+    GotDaily(d) => (
+      @rabbita.batch([dispatch(PollReactions), dispatch(PollPast)]),
+      { ..model, daily: DailyLoaded(d) },
+    )
     DailyErr(e) => (@rabbita.none, { ..model, daily: DailyError(e) })
     PollReactions => {
       let cmd = @http.get(
@@ -90,6 +96,22 @@ fn update(dispatch : @rabbita.Dispatch[Msg], msg : Msg, model : Model) -> (@rabb
       (cmd, model)
     }
     GotReactions(r) => (@rabbita.none, { ..model, reactions: r })
+    PollPast => {
+      let cmd = @http.get(
+        "http://127.0.0.1:8721/daily/past",
+        expect=Json(
+          fn(result) {
+            match result {
+              Ok(p) => dispatch(GotPast(p))
+              Err(_) => dispatch(GotPast([]))
+            }
+          },
+          @daily.decode_past,
+        ),
+      )
+      (cmd, model)
+    }
+    GotPast(p) => (@rabbita.none, { ..model, past: p })
 
     // Claude
     PollClaude => {
@@ -119,7 +141,7 @@ fn view(dispatch : @rabbita.Dispatch[Msg], model : Model) -> @html.Html {
   @html.div([
     view_header(dispatch, model),
     match model.tab {
-      Daily => view_daily(model.daily, model.reactions)
+      Daily => view_daily(model.daily, model.reactions, model.past)
       Claude => view_claude(model.claude)
     },
     view_footer(),
@@ -164,15 +186,15 @@ fn view_footer() -> @html.Html {
 
 // --- Daily view ---
 
-fn view_daily(state : DailyState, reactions : Array[@daily.Reaction]) -> @html.Html {
+fn view_daily(state : DailyState, reactions : Array[@daily.Reaction], past : Array[@daily.PastDaily]) -> @html.Html {
   match state {
     DailyLoading => @html.div(class="loading glow", "LOADING...")
     DailyError(e) => @html.div(class="loading error glow", "ERROR: \{e}")
-    DailyLoaded(note) => view_daily_loaded(note, reactions)
+    DailyLoaded(note) => view_daily_loaded(note, reactions, past)
   }
 }
 
-fn view_daily_loaded(note : @daily.DailyNote, reactions : Array[@daily.Reaction]) -> @html.Html {
+fn view_daily_loaded(note : @daily.DailyNote, reactions : Array[@daily.Reaction], past : Array[@daily.PastDaily]) -> @html.Html {
   let reaction_map : Map[String, String] = {}
   reactions.each(fn(r) { reaction_map[r.time] = r.reaction })
   @html.div(
@@ -193,6 +215,37 @@ fn view_daily_loaded(note : @daily.DailyNote, reactions : Array[@daily.Reaction]
       @html.div(
         class="timeline",
         note.timeline.map(fn(entry) { view_timeline_entry(entry, reaction_map) }),
+      ),
+      if past.length() > 0 { view_past(past) } else { @html.nothing },
+    ],
+  )
+}
+
+fn view_past(past : Array[@daily.PastDaily]) -> @html.Html {
+  @html.div(
+    class="past-section",
+    [
+      @html.h2(class="past-title", "LOOKING BACK"),
+      @html.div(
+        class="past-list",
+        past.map(fn(p) {
+          let label = "\{p.months_ago}mo ago"
+          let first = if p.timeline.length() > 0 { p.timeline[0].text } else { p.plan }
+          let preview = if first.length() > 80 {
+            let s = first[:80].to_string()
+            "\{s}..."
+          } else {
+            first
+          }
+          @html.div(
+            class="past-item",
+            [
+              @html.span(class="past-label glow", label),
+              @html.span(class="past-date", p.date),
+              @html.div(class="past-preview", preview),
+            ],
+          )
+        }),
       ),
     ],
   )
@@ -342,6 +395,7 @@ fn main {
       tab: Daily,
       daily: DailyLoading,
       reactions: [],
+      past: [],
       claude: ClaudeLoading,
     },
     update=update,
